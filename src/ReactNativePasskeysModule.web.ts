@@ -48,6 +48,7 @@ export default {
 					// TODO: remove the override when typescript has updated webauthn types
 					transports: (credential.transports ?? undefined) as AuthenticatorTransport[] | undefined,
 				})),
+				// @ts-expect-error - largeBlob.write type mismatch between local and DOM webauthn types
 				extensions: {
 					...request.extensions,
 					prf: normalizePRFInputs(request),
