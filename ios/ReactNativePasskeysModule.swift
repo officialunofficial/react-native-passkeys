@@ -41,14 +41,25 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
                 throw InvalidChallengeException()
             }
 
-            let crossPlatformKeyAssertionRequest = prepareCrossPlatformAssertionRequest(
-                challenge: challengeData, request: request)
             let platformKeyAssertionRequest = try preparePlatformAssertionRequest(
                 challenge: challengeData, request: request)
 
-            let authController = ASAuthorizationController(authorizationRequests: [
-                platformKeyAssertionRequest, crossPlatformKeyAssertionRequest,
-            ])
+            // When allowCredentials is specified, use only the platform provider so iOS
+            // auto-selects the credential without showing a picker. Including the
+            // cross-platform provider triggers the expanded "choose how to sign in" UI,
+            // which breaks targeted assertions with third-party providers (Chrome, 1Password).
+            let authController: ASAuthorizationController
+            if let allowCredentials = request.allowCredentials, !allowCredentials.isEmpty {
+                authController = ASAuthorizationController(authorizationRequests: [
+                    platformKeyAssertionRequest,
+                ])
+            } else {
+                let crossPlatformKeyAssertionRequest = prepareCrossPlatformAssertionRequest(
+                    challenge: challengeData, request: request)
+                authController = ASAuthorizationController(authorizationRequests: [
+                    platformKeyAssertionRequest, crossPlatformKeyAssertionRequest,
+                ])
+            }
 
             passkeyDelegate.performAuthForController(controller: authController)
         }.runOnQueue(.main)
