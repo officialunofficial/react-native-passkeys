@@ -75,11 +75,8 @@ class ReactNativePasskeysModule : Module() {
             val credentialManager =
                 CredentialManager.create(appContext.reactContext?.applicationContext!!)
             val json = Gson().toJson(request)
-            val hasAllowCredentials = request.allowCredentials != null && request.allowCredentials!!.isNotEmpty()
-            val getCredentialRequest = GetCredentialRequest.Builder()
-                .addCredentialOption(GetPublicKeyCredentialOption(json))
-                .setAutoSelectAllowed(hasAllowCredentials)
-                .build()
+            val getCredentialRequest =
+                GetCredentialRequest(listOf(GetPublicKeyCredentialOption(json)))
 
             mainScope.launch {
                 try {
