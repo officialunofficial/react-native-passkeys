@@ -97,7 +97,10 @@ and should look something like this (you can generate this file using the [Andro
 ```json
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "<package_name>",
@@ -108,6 +111,10 @@ and should look something like this (you can generate this file using the [Andro
 ```
 
 Replace `<package_name>` with your app's package name and `<sha256_cert_fingerprint>` with your app's SHA256 certificate fingerprint.
+
+The `get_login_creds` relation is required for passkey flows via Android's Credential Manager — without it, calls will fail silently or return "no matching credentials". `handle_all_urls` alone is only enough for App Links. See [Credential Manager prerequisites](https://developer.android.com/identity/credential-manager/prerequisites).
+
+> **Note on DAL caching:** Android caches `assetlinks.json` for up to 24 hours. After updating, reinstall the app on your device/emulator to force a fresh fetch.
 
 #### 2. Modify Expo Build Properties
 
