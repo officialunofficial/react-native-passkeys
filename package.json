@@ -40,6 +40,15 @@
   "author": "Peter Ferguson <peterferguson95@gmail.com> (https://github.com/peterferguson)",
   "license": "MIT",
   "homepage": "https://github.com/peterferguson/react-native-passkeys#readme",
+  "files": [
+    "build",
+    "src",
+    "android/build.gradle",
+    "android/src/main",
+    "ios",
+    "expo-module.config.json",
+    "CHANGELOG.md"
+  ],
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.17.4",
     "@changesets/cli": "^2.26.2",
