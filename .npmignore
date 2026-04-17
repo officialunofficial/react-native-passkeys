@@ -9,3 +9,10 @@ __tests__
 /android/src/test/
 /android/build/
 /example/
+
+# Top-level hidden files (not covered by /.*/)
+/.attw.json
+/.eslintrc.js
+/.mygitignore
+/.oxfmtrc.json
+/.oxlintrc.json
