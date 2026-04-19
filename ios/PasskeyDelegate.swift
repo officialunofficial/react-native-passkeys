@@ -44,16 +44,10 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-
-        switch authorization.credential {
-        case let credential as ASAuthorizationPlatformPublicKeyCredentialRegistration:
-            guard let result = createPlatformRegistrationResult(from: credential) else {
-                return
-            }
-
-            handler.onSuccessRegistration(result)
-
-        case let credential as ASAuthorizationAccountCreationPlatformPublicKeyCredential:
+        if #available(iOS 26.0, *),
+            let credential =
+                authorization.credential as? ASAuthorizationAccountCreationPlatformPublicKeyCredential
+        {
             guard let registrationResult = createPlatformRegistrationResult(
                 from: credential.credentialRegistration)
             else {
@@ -75,6 +69,16 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
             )
 
             handler.onSuccessAccountCreation(accountCreationResult)
+            return
+        }
+
+        switch authorization.credential {
+        case let credential as ASAuthorizationPlatformPublicKeyCredentialRegistration:
+            guard let result = createPlatformRegistrationResult(from: credential) else {
+                return
+            }
+
+            handler.onSuccessRegistration(result)
 
         case let credential as ASAuthorizationSecurityKeyPublicKeyCredentialRegistration:
             guard credential.rawAttestationObject != nil else {
@@ -235,12 +239,12 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         switch identifier {
         case .email(let email):
             return AccountCreationContactIdentifierJSON(
-                type: Field.init(wrappedValue: .email),
+                type: Field.init(wrappedValue: "email"),
                 value: Field.init(wrappedValue: email.value)
             )
         case .phoneNumber(let phoneNumber):
             return AccountCreationContactIdentifierJSON(
-                type: Field.init(wrappedValue: .phoneNumber),
+                type: Field.init(wrappedValue: "phoneNumber"),
                 value: Field.init(wrappedValue: phoneNumber.value)
             )
         }

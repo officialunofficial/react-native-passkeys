@@ -5,7 +5,7 @@ typealias PublicKeyCredentialJSON = Either<RegistrationResponseJSON, Authenticat
 
 internal struct AccountCreationContactIdentifierJSON: Record {
     @Field
-    var type: AccountCreationContactIdentifierType
+    var type: String
 
     @Field
     var value: String
