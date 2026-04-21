@@ -47,14 +47,20 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
                 throw InvalidChallengeException()
             }
 
-            let crossPlatformKeyAssertionRequest = prepareCrossPlatformAssertionRequest(
-                challenge: challengeData, request: request)
             let platformKeyAssertionRequest = try preparePlatformAssertionRequest(
                 challenge: challengeData, request: request)
-
-            let authController = ASAuthorizationController(authorizationRequests: [
-                platformKeyAssertionRequest, crossPlatformKeyAssertionRequest,
-            ])
+            let authController: ASAuthorizationController
+            if let allowCredentials = request.allowCredentials, !allowCredentials.isEmpty {
+                authController = ASAuthorizationController(authorizationRequests: [
+                    platformKeyAssertionRequest
+                ])
+            } else {
+                let crossPlatformKeyAssertionRequest = prepareCrossPlatformAssertionRequest(
+                    challenge: challengeData, request: request)
+                authController = ASAuthorizationController(authorizationRequests: [
+                    platformKeyAssertionRequest, crossPlatformKeyAssertionRequest,
+                ])
+            }
 
             passkeyDelegate.performAuthForController(controller: authController)
         }.runOnQueue(.main)

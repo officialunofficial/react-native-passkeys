@@ -41,10 +41,13 @@ export default {
 		const credential = await passkeys.createAccount(request);
 		return {
 			...credential,
-			response: {
-				...credential.response,
-				getPublicKey() {
-					return credential.response?.publicKey;
+			credentialRegistration: {
+				...credential.credentialRegistration,
+				response: {
+					...credential.credentialRegistration.response,
+					getPublicKey() {
+						return credential.credentialRegistration.response?.publicKey;
+					},
 				},
 			},
 		};

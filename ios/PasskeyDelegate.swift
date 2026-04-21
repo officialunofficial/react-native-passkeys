@@ -55,17 +55,10 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
             }
 
             let accountCreationResult = AccountCreationResponseJSON(
-                id: Field.init(wrappedValue: registrationResult.id),
-                rawId: Field.init(wrappedValue: registrationResult.rawId),
-                response: Field.init(wrappedValue: registrationResult.response),
-                account: Field.init(
-                    wrappedValue: AccountCreationDetailsJSON(
-                        contactIdentifier: Field.init(
-                            wrappedValue: getContactIdentifier(from: credential.contactIdentifier)),
-                        name: Field.init(wrappedValue: getName(from: credential.name))
-                    )),
-                clientExtensionResults: Field.init(
-                    wrappedValue: registrationResult.clientExtensionResults)
+                name: Field.init(wrappedValue: getName(from: credential.name)),
+                contactIdentifier: Field.init(
+                    wrappedValue: getContactIdentifier(from: credential.contactIdentifier)),
+                credentialRegistration: Field.init(wrappedValue: registrationResult)
             )
 
             handler.onSuccessAccountCreation(accountCreationResult)

@@ -31,14 +31,6 @@ internal struct PersonNameComponentsJSON: Record {
     var nickname: String?
 }
 
-internal struct AccountCreationDetailsJSON: Record {
-    @Field
-    var contactIdentifier: AccountCreationContactIdentifierJSON
-
-    @Field
-    var name: PersonNameComponentsJSON?
-}
-
 /// Specification reference: https://w3c.github.io/webauthn/#dictdef-registrationresponsejson
 internal struct RegistrationResponseJSON: Record {
     @Field
@@ -62,25 +54,13 @@ internal struct RegistrationResponseJSON: Record {
 
 internal struct AccountCreationResponseJSON: Record {
     @Field
-    var id: Base64URLString
+    var name: PersonNameComponentsJSON?
 
     @Field
-    var rawId: Base64URLString
+    var contactIdentifier: AccountCreationContactIdentifierJSON
 
     @Field
-    var response: AuthenticatorAttestationResponseJSON
-
-    @Field
-    var account: AccountCreationDetailsJSON
-
-    @Field
-    var authenticatorAttachment: AuthenticatorAttachment?
-
-    @Field
-    var clientExtensionResults: AuthenticationExtensionsClientOutputsJSON?
-
-    @Field
-    var type: PublicKeyCredentialType = .publicKey
+    var credentialRegistration: RegistrationResponseJSON
 }
 
 /// Specification reference: https://w3c.github.io/webauthn/#dictdef-authenticatorattestationresponsejson

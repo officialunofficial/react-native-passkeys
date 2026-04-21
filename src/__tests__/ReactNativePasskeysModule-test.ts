@@ -18,21 +18,21 @@ describe("ReactNativePasskeysModule.createAccount", () => {
 
 	it("wraps the native account creation response with getPublicKey", async () => {
 		mockNativeModule.createAccount.mockResolvedValue({
-			id: "credential-id",
-			rawId: "credential-id",
-			type: "public-key",
-			account: {
-				contactIdentifier: {
-					type: "email",
-					value: "andrew@example.com",
+			contactIdentifier: {
+				type: "email",
+				value: "andrew@example.com",
+			},
+			credentialRegistration: {
+				id: "credential-id",
+				rawId: "credential-id",
+				type: "public-key",
+				response: {
+					clientDataJSON: "client-data",
+					attestationObject: "attestation-object",
+					publicKey: "public-key",
 				},
+				clientExtensionResults: {},
 			},
-			response: {
-				clientDataJSON: "client-data",
-				attestationObject: "attestation-object",
-				publicKey: "public-key",
-			},
-			clientExtensionResults: {},
 		});
 
 		const module = require("../ReactNativePasskeysModule").default;
@@ -51,11 +51,11 @@ describe("ReactNativePasskeysModule.createAccount", () => {
 			shouldRequestName: true,
 			userId: "user-id",
 		});
-		expect(response?.account.contactIdentifier).toEqual({
+		expect(response?.contactIdentifier).toEqual({
 			type: "email",
 			value: "andrew@example.com",
 		});
-		expect(response?.response.getPublicKey()).toBe("public-key");
+		expect(response?.credentialRegistration.response.getPublicKey()).toBe("public-key");
 	});
 
 	it("throws when account creation is not supported", async () => {

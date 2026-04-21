@@ -96,11 +96,6 @@ export interface AccountCreationContactIdentifier {
 	value: string;
 }
 
-export interface AccountCreationDetails {
-	contactIdentifier: AccountCreationContactIdentifier;
-	name?: PersonNameComponentsJSON;
-}
-
 /**
  * A slightly-modified RegistrationCredential to simplify working with ArrayBuffers that
  * are Base64URL-encoded so that they can be sent as JSON.
@@ -285,6 +280,8 @@ export interface CreationResponse extends Omit<RegistrationResponseJSON, "respon
 	};
 }
 
-export interface AccountCreationResponse extends Omit<CreationResponse, "account"> {
-	account: AccountCreationDetails;
+export interface AccountCreationResponse {
+	name?: PersonNameComponentsJSON;
+	contactIdentifier: AccountCreationContactIdentifier;
+	credentialRegistration: CreationResponse;
 }
