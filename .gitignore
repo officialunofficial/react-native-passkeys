@@ -58,4 +58,4 @@ yarn-error.log
 .expo/*
 
 # claude 
-.claude/*.local.json
+.claude/*.local.jsonpackage-lock.json

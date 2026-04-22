@@ -7,8 +7,21 @@ struct PasskeyContext {
     let promise: Promise
 }
 
-final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
+/// Separate slot from `passkeyContext` — see `PasskeyAutoFillDelegate`
+/// for rationale. A conditional-UI request can sit idle for the whole
+/// screen lifetime without blocking explicit `get`/`create` calls, and
+/// we need an independent handle to cancel the controller from JS.
+struct AutoFillContext {
+    let delegate: PasskeyAutoFillDelegate
+    let controller: ASAuthorizationController
+    let promise: Promise
+}
+
+final public class ReactNativePasskeysModule: Module, PasskeyResultHandler,
+    PasskeyAutoFillResultHandler
+{
     private var passkeyContext: PasskeyContext?
+    private var autoFillContext: AutoFillContext?
 
     public func definition() -> ModuleDefinition {
         Name("ReactNativePasskeys")
@@ -21,8 +34,16 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
             }
         }
 
+        /// Conditional-UI / AutoFill is supported on iOS 16+ via
+        /// `ASAuthorizationController.performAutoFillAssistedRequests()`.
+        /// Pre-16 returns false so callers fall back to the explicit
+        /// `get` flow.
         Function("isAutoFillAvailable") { () -> Bool in
-            return false
+            if #available(iOS 16.0, *) {
+                return true
+            } else {
+                return false
+            }
         }
 
         Function("isAccountCreationSupported") { () -> Bool in
@@ -112,6 +133,62 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
             passkeyContext = context
 
             context.passkeyDelegate.performAuthForController(controller: authController)
+        }.runOnQueue(.main)
+
+        /// Conditional-UI variant of `get`. iOS 16+ surfaces matching
+        /// passkeys in the quicktype bar / AutoFill sheet; the promise
+        /// resolves only when the user picks one. Callers invoke
+        /// `cancelAutoFill` on screen unmount so the controller doesn't
+        /// leak across navigations.
+        ///
+        /// Uses a dedicated context slot so it can run in parallel with
+        /// the explicit `get` flow — the two don't share state and
+        /// neither gates the other.
+        AsyncFunction("getAutoFill") {
+            (request: PublicKeyCredentialRequestOptions, promise: Promise) throws in
+            guard #available(iOS 16.0, *) else {
+                throw NotSupportedException()
+            }
+
+            // Supersede any prior auto-fill request. Re-firing
+            // `getAutoFill` on the same screen (e.g. after the keyboard
+            // refocuses) shouldn't leak the previous controller.
+            self.cancelAutoFillInternal(reason: .superseded)
+
+            if LAContext().biometricType == .none {
+                throw BiometricException()
+            }
+
+            guard let challengeData: Data = Data(base64URLEncoded: request.challenge) else {
+                throw InvalidChallengeException()
+            }
+
+            // Build both request kinds so security keys and platform
+            // credentials both surface through AutoFill when available.
+            let crossPlatformKeyAssertionRequest = prepareCrossPlatformAssertionRequest(
+                challenge: challengeData, request: request)
+            let platformKeyAssertionRequest = try preparePlatformAssertionRequest(
+                challenge: challengeData, request: request)
+
+            let authController = ASAuthorizationController(authorizationRequests: [
+                platformKeyAssertionRequest, crossPlatformKeyAssertionRequest,
+            ])
+
+            let delegate = PasskeyAutoFillDelegate(handler: self)
+            self.autoFillContext = AutoFillContext(
+                delegate: delegate,
+                controller: authController,
+                promise: promise
+            )
+
+            delegate.performAutoFillAuth(controller: authController)
+        }.runOnQueue(.main)
+
+        /// Cancel the in-flight auto-fill request and resolve its
+        /// promise with `null`. Idempotent — a no-op when no auto-fill
+        /// is pending.
+        AsyncFunction("cancelAutoFill") { () -> Void in
+            self.cancelAutoFillInternal(reason: .userCancelled)
         }.runOnQueue(.main)
 
         AsyncFunction("createAccount") {
@@ -224,6 +301,66 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
             handleASAuthorizationError(
                 errorCode: (error as NSError).code,
                 localizedDescription: error.localizedDescription))
+    }
+
+    // MARK: - Auto-fill callbacks
+
+    internal func onAutoFillSuccess(_ data: AuthenticationResponseJSON) {
+        guard let promise = autoFillContext?.promise else {
+            // Delegate fired after we cancelled the controller — benign.
+            return
+        }
+        autoFillContext = nil
+        promise.resolve(data)
+    }
+
+    internal func onAutoFillFailure(_ error: Error) {
+        guard let promise = autoFillContext?.promise else {
+            // Cancelled locally via `cancelAutoFillInternal` — we
+            // already resolved the promise, nothing to do here.
+            return
+        }
+        autoFillContext = nil
+
+        // Map ASAuthorizationError.canceled to a null resolution rather
+        // than a rejection: for conditional UI, "user dismissed the
+        // sheet / focus moved elsewhere" is the *expected* non-pick
+        // path, not an error. The JS caller can distinguish null
+        // (no-pick) from a thrown error (misconfiguration, passkey
+        // provider refused).
+        if let asError = error as? ASAuthorizationError, asError.code == .canceled {
+            promise.resolve(nil)
+            return
+        }
+
+        promise.reject(
+            handleASAuthorizationError(
+                errorCode: (error as NSError).code,
+                localizedDescription: error.localizedDescription))
+    }
+
+    /// Reason surfaced through `cancelAutoFillInternal` so the handler
+    /// can distinguish "caller pulled the plug" from "another request
+    /// is taking over" — both paths resolve the JS promise with `null`,
+    /// but only the user-cancel path should cancel the underlying iOS
+    /// controller.
+    private enum AutoFillCancelReason {
+        case userCancelled
+        case superseded
+    }
+
+    private func cancelAutoFillInternal(reason: AutoFillCancelReason) {
+        guard let context = autoFillContext else { return }
+        autoFillContext = nil
+
+        if #available(iOS 16.0, *) {
+            context.controller.cancel()
+        }
+
+        // Resolve with null so the JS caller can distinguish "no
+        // assertion yet" from the success / rejection cases.
+        context.promise.resolve(nil)
+        _ = reason  // quieted for now; keep the enum for future logging
     }
 
 }

@@ -48,6 +48,21 @@ class ReactNativePasskeysModule : Module() {
             false
         }
 
+        // Conditional-UI stubs. Android Credential Manager supports
+        // conditional `get` via `GetCredentialRequest.Builder.setPreferImmediatelyAvailableCredentials`
+        // + the isConditional flag on API 34+, but wiring it through
+        // this module requires Activity lifecycle hooks the current
+        // design doesn't expose. Resolve with `null` so the JS caller
+        // can uniformly treat "no autofill assertion yet" as the
+        // platform-agnostic no-op path and fall back to explicit `get`.
+        AsyncFunction("getAutoFill") { _: PublicKeyCredentialRequestOptions, promise: Promise ->
+            promise.resolve(null)
+        }
+
+        AsyncFunction("cancelAutoFill") { promise: Promise ->
+            promise.resolve(null)
+        }
+
         AsyncFunction("create") { request: PublicKeyCredentialCreationOptions, promise: Promise ->
             val credentialManager =
                 CredentialManager.create(appContext.reactContext?.applicationContext!!)

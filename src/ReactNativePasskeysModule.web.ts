@@ -16,6 +16,12 @@ import type {
 	CreationResponse,
 } from "./ReactNativePasskeys.types";
 
+// Single AbortController for the currently-in-flight conditional
+// `navigator.credentials.get({ mediation: "conditional" })` call. Kept
+// outside the module object so `cancelAutoFill` can reach it without a
+// `this`-bound method dance.
+let autoFillAbort: AbortController | null = null;
+
 export default {
 	get name(): string {
 		return "ReactNativePasskeys";
@@ -23,6 +29,14 @@ export default {
 
 	isAutoFillAvalilable(): Promise<boolean> {
 		return window.PublicKeyCredential.isConditionalMediationAvailable?.() ?? Promise.resolve(false);
+	},
+
+	// Correctly-spelled alias, matches the native module's Function
+	// name. New callers prefer this.
+	async isAutoFillAvailable(): Promise<boolean> {
+		return (
+			(await window.PublicKeyCredential.isConditionalMediationAvailable?.()) ?? false
+		);
 	},
 
 	isSupported() {
@@ -33,6 +47,103 @@ export default {
 
 	isAccountCreationSupported() {
 		return false;
+	},
+
+	/**
+	 * Web conditional-UI via `navigator.credentials.get({ mediation:
+	 * "conditional" })`. Resolves with `null` when the user picks
+	 * nothing (aborted via `cancelAutoFill` or the browser ends the
+	 * conditional-UI session). Rejects only on unexpected errors.
+	 */
+	async getAutoFill({
+		...request
+	}: PublicKeyCredentialRequestOptionsJSON): Promise<AuthenticationResponseJSON | null> {
+		if (!this.isSupported()) return null;
+		if (!(await this.isAutoFillAvailable())) return null;
+
+		// Supersede any prior conditional call so a re-mount doesn't
+		// leak an abortable promise.
+		autoFillAbort?.abort();
+		const controller = new AbortController();
+		autoFillAbort = controller;
+
+		let credential: AuthenticationCredential | null;
+		try {
+			credential = (await navigator.credentials.get({
+				mediation: "conditional",
+				signal: controller.signal,
+				// biome-ignore lint/suspicious/noExplicitAny: largeBlob.write mismatch between JSON (base64url string) and DOM BufferSource
+				publicKey: ({
+					...request,
+					challenge: base64URLStringToBuffer(request.challenge),
+					allowCredentials: request.allowCredentials?.map((cred) => ({
+						...cred,
+						id: base64URLStringToBuffer(cred.id),
+						transports: (cred.transports ?? undefined) as
+							| AuthenticatorTransport[]
+							| undefined,
+					})),
+				} as any),
+			})) as AuthenticationCredential | null;
+		} catch (error) {
+			if (
+				error instanceof DOMException &&
+				(error.name === "AbortError" || error.name === "NotAllowedError")
+			) {
+				return null;
+			}
+			throw error;
+		} finally {
+			if (autoFillAbort === controller) {
+				autoFillAbort = null;
+			}
+		}
+
+		if (!credential) return null;
+
+		const extensions =
+			credential.getClientExtensionResults() as AuthenticationExtensionsClientOutputs;
+		const { largeBlob, prf, credProps, ...clientExtensionResults } = extensions;
+
+		return {
+			id: credential.id,
+			rawId: credential.id,
+			response: {
+				clientDataJSON: bufferToBase64URLString(credential.response.clientDataJSON),
+				authenticatorData: bufferToBase64URLString(credential.response.authenticatorData),
+				signature: bufferToBase64URLString(credential.response.signature),
+				userHandle: credential.response.userHandle
+					? bufferToBase64URLString(credential.response.userHandle)
+					: undefined,
+			},
+			authenticatorAttachment: undefined,
+			clientExtensionResults: {
+				...clientExtensionResults,
+				...(largeBlob && {
+					largeBlob: {
+						...largeBlob,
+						blob: largeBlob?.blob ? bufferToBase64URLString(largeBlob.blob) : undefined,
+					},
+				}),
+				...(prf?.results && {
+					prf: {
+						results: {
+							first: bufferToBase64URLString(prf.results.first),
+							second: prf.results.second
+								? bufferToBase64URLString(prf.results.second)
+								: undefined,
+						},
+					},
+				}),
+				...(credProps && { credProps }),
+			} satisfies AuthenticationExtensionsClientOutputsJSON,
+			type: "public-key",
+		};
+	},
+
+	async cancelAutoFill(): Promise<void> {
+		autoFillAbort?.abort();
+		autoFillAbort = null;
 	},
 
 	async create({
@@ -54,10 +165,16 @@ export default {
 					// TODO: remove the override when typescript has updated webauthn types
 					transports: (cred.transports ?? undefined) as AuthenticatorTransport[] | undefined,
 				})),
-				extensions: {
+				// The DOM WebAuthn types declare `largeBlob.write` as
+				// `BufferSource`, but our JSON input type carries it as
+				// base64url. The upstream `get` path has the same mismatch
+				// via a `@ts-expect-error:` comment in the extensions block;
+				// we cast here to match.
+				// biome-ignore lint/suspicious/noExplicitAny: WebAuthn L3 BufferSource vs JSON base64url shape mismatch
+				extensions: ({
 					...request.extensions,
 					prf: normalizePRFInputs(request),
-				},
+				} as any),
 			},
 		})) as RegistrationCredential;
 
