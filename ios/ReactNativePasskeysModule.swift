@@ -14,7 +14,10 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
         Name("ReactNativePasskeys")
 
         Function("isSupported") { () -> Bool in
-            if #available(iOS 15.0, *) {
+            // Platform passkeys (ASAuthorizationPlatformPublicKeyCredentialProvider) are available
+            // on iOS 15+ and macOS 12+. We require macOS 13.4+ at the pod level to match
+            // react-native-macos 0.85's deployment target.
+            if #available(iOS 15.0, macOS 12.0, *) {
                 return true
             } else {
                 return false
@@ -26,7 +29,7 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
         }
 
         Function("isAccountCreationSupported") { () -> Bool in
-            if #available(iOS 26.0, *) {
+            if #available(iOS 26.0, macOS 26.0, *) {
                 return true
             } else {
                 return false
@@ -135,7 +138,7 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
 
             let authController: ASAuthorizationController
 
-            if #available(iOS 26.0, *) {
+            if #available(iOS 26.0, macOS 26.0, *) {
                 let provider = ASAuthorizationAccountCreationProvider()
                 let accountCreationRequest =
                     provider.createPlatformPublicKeyCredentialRegistrationRequest(
@@ -168,19 +171,25 @@ final public class ReactNativePasskeysModule: Module, PasskeyResultHandler {
     }
 
     private func ensureStandardPasskeysAvailable() throws {
-        if #unavailable(iOS 15.0) {
+        if #unavailable(iOS 15.0, macOS 12.0) {
             throw NotSupportedException()
         }
 
         try ensureRequestCanStart()
 
-        if LAContext().biometricType == .none {
-            throw BiometricException()
-        }
+        // On iOS the device must have biometrics enrolled to use platform passkeys. On macOS,
+        // passkeys are usable without local biometrics (Touch ID is optional hardware; the system
+        // falls back to the login password / a nearby iPhone / Apple Watch), so we must NOT gate
+        // on biometrics there or every Mac without a Touch Bar would fail.
+        #if !os(macOS)
+            if LAContext().biometricType == .none {
+                throw BiometricException()
+            }
+        #endif
     }
 
     private func ensureFastAccountCreationAvailable() throws {
-        if #unavailable(iOS 26.0) {
+        if #unavailable(iOS 26.0, macOS 26.0) {
             throw FastAccountCreationNotSupportedException()
         }
 
@@ -264,7 +273,7 @@ private func prepareCrossPlatformRegistrationRequest(
 
     if let excludedCredentials = request.excludeCredentials {
         if !excludedCredentials.isEmpty {
-            if #available(iOS 17.4, *) {
+            if #available(iOS 17.4, macOS 14.4, *) {
                 crossPlatformRegistrationRequest.excludedCredentials = excludedCredentials.map({
                     $0.getCrossPlatformDescriptor()
                 })
@@ -297,7 +306,7 @@ private func preparePlatformRegistrationRequest(
     // TODO: integrate this
     // platformKeyRegistrationRequest.shouldShowHybridTransport
 
-    if #available(iOS 17, *) {
+    if #available(iOS 17, macOS 14.0, *) {
         switch request.extensions?.largeBlob?.support {
         case .preferred:
             platformKeyRegistrationRequest.largeBlob =
@@ -310,7 +319,7 @@ private func preparePlatformRegistrationRequest(
         }
     }
 
-    if #available(iOS 18, *) {
+    if #available(iOS 18, macOS 15.0, *) {
         if let prf = request.extensions?.prf {
             platformKeyRegistrationRequest.prf =
                 try prf.eval.map { eval in
@@ -347,7 +356,7 @@ private func preparePlatformRegistrationRequest(
 
     if let excludedCredentials = request.excludeCredentials {
         if !excludedCredentials.isEmpty {
-            if #available(iOS 17.4, *) {
+            if #available(iOS 17.4, macOS 14.4, *) {
                 platformKeyRegistrationRequest.excludedCredentials = excludedCredentials.map({
                     $0.getPlatformDescriptor()
                 })
@@ -391,7 +400,7 @@ private func preparePlatformAssertionRequest(
     let platformKeyAssertionRequest: ASAuthorizationPlatformPublicKeyCredentialAssertionRequest =
         platformKeyCredentialProvider.createCredentialAssertionRequest(challenge: challenge)
 
-    if #available(iOS 17, *) {
+    if #available(iOS 17, macOS 14.0, *) {
         if request.extensions?.largeBlob?.read == true {
             platformKeyAssertionRequest.largeBlob =
                 ASAuthorizationPublicKeyCredentialLargeBlobAssertionInput.read
@@ -405,7 +414,7 @@ private func preparePlatformAssertionRequest(
         }
     }
 
-    if #available(iOS 18, *) {
+    if #available(iOS 18, macOS 15.0, *) {
         if let prfInputs = request.extensions?.prf {
             /// Helper function to decode PRF values
             func decodePRFValues(
@@ -508,7 +517,7 @@ func handleASAuthorizationError(errorCode: Int, localizedDescription: String = "
             return PasskeyRequestFailedException(
                 name: "PasskeyRequestFailedException", description: localizedDescription)
         default:
-            if #available(iOS 26.0, *) {
+            if #available(iOS 26.0, macOS 26.0, *) {
                 switch code {
                 case .deviceNotConfiguredForPasskeyCreation:
                     return DeviceNotConfiguredForPasskeyCreationException(
@@ -533,6 +542,10 @@ func handleASAuthorizationError(errorCode: Int, localizedDescription: String = "
     }
 }
 
+// Biometric gating is iOS-only (see `ensureStandardPasskeysAvailable`). The `.opticID`
+// `LABiometryType` case does not exist in the macOS SDK, so keep this whole helper out of the
+// macOS build to avoid a compile error.
+#if !os(macOS)
 extension LAContext {
     enum BiometricType: String {
         case none
@@ -568,3 +581,4 @@ extension LAContext {
         }
     }
 }
+#endif

@@ -80,6 +80,53 @@ npx expo prebuild -p ios
 npx expo run:ios # or build in the cloud with EAS
 ```
 
+## macOS Setup (react-native-macos)
+
+Platform passkeys are supported on **macOS 13.4+** via the same `AuthenticationServices`
+APIs used on iOS. The JavaScript API is identical — `create()`, `get()`, `isSupported()`,
+`isAccountCreationSupported()` / `createAccount()` all work the same way. Only the native
+presentation differs (the system sheet is anchored to the app's key `NSWindow` instead of a
+`UIWindow`).
+
+This module ships macOS support through the Expo `apple` platform, so it autolinks into a
+react-native-macos app the same way it does on iOS. Fast Account Creation
+(`createAccount` / `isAccountCreationSupported`) requires **macOS 26+** (mirrors the iOS 26
+requirement); on older macOS it reports unsupported and throws if called.
+
+#### 1. Host an Apple App Site Association (AASA) file
+
+macOS uses the **same** AASA file and `webcredentials` association as iOS (see the iOS
+section above). A single AASA hosted at
+`https://<your_domain>/.well-known/apple-app-site-association` covers both platforms. Add the
+macOS app's `<teamID>.<bundleID>` to the `webcredentials.apps` array (it can be the same app
+identifier if you share a bundle ID across platforms).
+
+#### 2. Add the Associated Domains entitlement to the macOS app
+
+The consuming macOS app target must declare the **Associated Domains** entitlement with a
+`webcredentials:<rpId>` entry, exactly like iOS:
+
+- Entitlement key: `com.apple.developer.associated-domains`
+- Value: an array containing `webcredentials:<your_domain>` (do **not** include a scheme or
+  path — just the registrable domain, e.g. `webcredentials:example.com`).
+
+In an Expo-managed react-native-macos app this is expressed the same way iOS is, scoped to the
+macOS target. The `rpId` you pass to `create()` / `get()` must match the domain in this
+entitlement and in the hosted AASA file. This module does **not** hardcode any rpId — it is
+always taken from the request options at call time.
+
+> Note: macOS additionally requires the app to be code-signed with a provisioning profile /
+> Developer ID that includes the Associated Domains capability for the entitlement to take
+> effect at runtime. Unlike iOS, biometrics are **not** required on macOS — the system falls
+> back to the login password, a nearby iPhone, or Apple Watch — so this module does not gate
+> passkey requests on local biometrics on macOS.
+
+#### 3. Minimum deployment target
+
+Set the macOS deployment target to **13.4** or higher (this is the floor used by
+react-native-macos 0.85 and the minimum where platform passkeys are usable). The podspec
+declares `:osx => '13.4'`.
+
 ## Android Setup
 
 #### 1. Host an `assetlinks.json` File

@@ -10,7 +10,13 @@ Pod::Spec.new do |s|
   s.license        = package['license']
   s.author         = package['author']
   s.homepage       = package['homepage']
-  s.platform       = :ios, '15.0'
+  s.platforms      = {
+    :ios => '15.0',
+    # macOS 13.4 is the minimum where platform passkeys (ASAuthorizationPlatformPublicKeyCredentialProvider)
+    # are usable, and it matches the floor used by react-native-macos 0.85. ExpoModulesCore advertises
+    # :osx => '10.15', so this is the binding constraint for this pod.
+    :osx => '13.4'
+  }
   s.swift_version  = '5.4'
   s.source         = { git: 'https://github.com/peterferguson/react-native-passkeys' }
   s.static_framework = true

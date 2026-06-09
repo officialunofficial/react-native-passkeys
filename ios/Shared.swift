@@ -118,7 +118,7 @@ internal enum AccountCreationContactIdentifierType: String, Enumerable {
     case email
     case phoneNumber
 
-    @available(iOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     func appleise() -> ASContactIdentifierRequest {
         switch self {
         case .email:

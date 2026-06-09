@@ -2,6 +2,12 @@ import AuthenticationServices
 import ExpoModulesCore
 import Foundation
 
+#if os(macOS)
+    import AppKit
+#else
+    import UIKit
+#endif
+
 protocol PasskeyResultHandler {
     func onSuccessRegistration(_ data: RegistrationResponseJSON)
     func onSuccessAccountCreation(_ data: AccountCreationResponseJSON)
@@ -19,19 +25,29 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     }
 
     // Perform the authorization request for a given ASAuthorizationController instance
-    @available(iOS 15.0, *)
+    @available(iOS 15.0, macOS 12.0, *)
     func performAuthForController(controller: ASAuthorizationController) {
         controller.delegate = self
         controller.presentationContextProvider = self
         controller.performRequests()
     }
 
-    @available(iOS 13.0, *)
+    @available(iOS 13.0, macOS 10.15, *)
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        return UIApplication.shared.keyWindow ?? ASPresentationAnchor()
+        // `ASPresentationAnchor` is `UIWindow` on iOS and `NSWindow` on macOS.
+        // The request-building code is identical across platforms; only the anchor differs.
+        #if os(macOS)
+            // Prefer the active key window, then the main window, then any available window.
+            return NSApplication.shared.keyWindow
+                ?? NSApplication.shared.mainWindow
+                ?? NSApplication.shared.windows.first
+                ?? ASPresentationAnchor()
+        #else
+            return UIApplication.shared.keyWindow ?? ASPresentationAnchor()
+        #endif
     }
 
-    @available(iOS 13.0, *)
+    @available(iOS 13.0, macOS 10.15, *)
     func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
@@ -39,12 +55,12 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         handler.onFailure(error)
     }
 
-    @available(iOS 15.0, *)
+    @available(iOS 15.0, macOS 12.0, *)
     func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        if #available(iOS 26.0, *),
+        if #available(iOS 26.0, macOS 26.0, *),
             let credential =
                 authorization.credential as? ASAuthorizationAccountCreationPlatformPublicKeyCredential
         {
@@ -107,7 +123,7 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         case let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion:
             var largeBlob: AuthenticationExtensionsLargeBlobOutputsJSON? =
                 AuthenticationExtensionsLargeBlobOutputsJSON()
-            if #available(iOS 17.0, *), let result = credential.largeBlob?.result {
+            if #available(iOS 17.0, macOS 14.0, *), let result = credential.largeBlob?.result {
                 switch result {
                 case .read(data: let blobData):
                     largeBlob?.blob = blobData?.toBase64URLEncodedString()
@@ -118,7 +134,7 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
             }
 
             var prf: AuthenticationExtensionsPRFOutputsJSON?
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, macOS 15.0, *) {
                 prf = credential.prf.map {
                     AuthenticationExtensionsPRFOutputsJSON(
                         results: Field.init(
@@ -178,7 +194,7 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         }
     }
 
-    @available(iOS 15.0, *)
+    @available(iOS 15.0, macOS 12.0, *)
     private func createPlatformRegistrationResult(
         from credential: ASAuthorizationPlatformPublicKeyCredentialRegistration
     ) -> RegistrationResponseJSON? {
@@ -188,14 +204,14 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         }
 
         var largeBlob: AuthenticationExtensionsLargeBlobOutputsJSON?
-        if #available(iOS 17.0, *) {
+        if #available(iOS 17.0, macOS 14.0, *) {
             largeBlob = AuthenticationExtensionsLargeBlobOutputsJSON(
                 supported: Field.init(wrappedValue: credential.largeBlob?.isSupported)
             )
         }
 
         var prf: AuthenticationExtensionsPRFOutputsJSON?
-        if #available(iOS 18.0, *) {
+        if #available(iOS 18.0, macOS 15.0, *) {
             prf = credential.prf.flatMap { it in
                 AuthenticationExtensionsPRFOutputsJSON(
                     enabled: Field.init(wrappedValue: it.isSupported),
@@ -232,7 +248,7 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         )
     }
 
-    @available(iOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func getContactIdentifier(
         from identifier: ASContactIdentifier
     ) -> AccountCreationContactIdentifierJSON {
@@ -250,7 +266,7 @@ class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         }
     }
 
-    @available(iOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func getName(
         from name: PersonNameComponents?
     ) -> PersonNameComponentsJSON? {

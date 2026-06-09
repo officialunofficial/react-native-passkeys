@@ -62,3 +62,5 @@ yarn-error.log
 
 # claude 
 .claude/*.local.json
+# stray excalidraw MCP log
+excalidraw.log
